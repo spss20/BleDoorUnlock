@@ -38,6 +38,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
     private int payloadSize = DEFAULT_MTU - 3;
     private int selectedDevicePosition = -1;
     private static final int VIEW_TYPE_SELECTED = 100;
+    private static final int VIEW_TYPE_NORMAL = 200;
 
     private static final UUID BLUETOOTH_LE_CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final UUID BLUETOOTH_LE_CC254X_SERVICE = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb");
@@ -67,23 +68,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
         bleDeviceList.clear();
     }
 
-//    public void removeDevice(BluetoothDevice bleDevice) {
-//        for (int i = 0; i < bleDeviceList.size(); i++) {
-//            BluetoothDevice device = bleDeviceList.get(i);
-//            if (bleDevice.getAddress().equals(device.getAddress())) {
-//                bleDeviceList.remove(i);
-//            }
-//        }
-//    }
-
     @NonNull
     @Override
     public MyViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view;
-        if (viewType == VIEW_TYPE_SELECTED) {
-            view = LayoutInflater.from(context).inflate(R.layout.device_item_selected, parent, false);
-        } else {
+        if (viewType == VIEW_TYPE_NORMAL) {
             view = LayoutInflater.from(context).inflate(R.layout.device_item, parent, false);
+        } else {
+            view = LayoutInflater.from(context).inflate(R.layout.device_item_selected, parent, false);
         }
         return new MyViewHolder(view);
     }
@@ -92,8 +84,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
     public int getItemViewType(int position) {
         if (position == selectedDevicePosition) {
             return VIEW_TYPE_SELECTED;
-        }
-        return super.getItemViewType(position);
+        } else return VIEW_TYPE_NORMAL;
     }
 
     @Override

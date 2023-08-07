@@ -17,7 +17,6 @@ import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.RelativeLayout;
@@ -30,21 +29,15 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.clj.fastble.BleManager;
-import com.clj.fastble.callback.BleScanCallback;
-import com.clj.fastble.data.BleDevice;
-import com.clj.fastble.scan.BleScanRuleConfig;
 import com.ncorti.slidetoact.SlideToActView;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @SuppressLint("MissingPermission")
 public class MainActivity extends AppCompatActivity {
 
-    private static final int REQUEST_CODE_OPEN_GPS = 1;
-    private static final int REQUEST_CODE_PERMISSION_LOCATION = 2;
+
     private static final String TAG = "MainActivity";
 
     private RecyclerView deviceRecycler;
@@ -56,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothLeScanner bluetoothLeScanner;
     private Handler handler = new Handler();
 
-    private static final long SCAN_PERIOD = 1000; // Scan for 10 seconds
+    private static final long SCAN_PERIOD = 2000; // Scan for 10 seconds
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,63 +64,22 @@ public class MainActivity extends AppCompatActivity {
         adapter = new DeviceAdapter(this);
         deviceRecycler.setAdapter(adapter);
 
-        scanButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                checkPermissions();
-            }
-        });
-
-
-        slideToUnlock.setOnSlideCompleteListener(new SlideToActView.OnSlideCompleteListener() {
-            @Override
-            public void onSlideComplete(@NonNull SlideToActView slideToActView) {
-                if (adapter != null){
-                    adapter.openGate(slideToActView);
-                }
-            }
-        });
-    }
-
-    private void checkPermissions() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (bluetoothAdapter == null) {
-            Toast.makeText(this, "Your device does not support Bluetooth", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (!bluetoothAdapter.isEnabled()) {
-            Toast.makeText(this, getString(R.string.please_open_blue), Toast.LENGTH_LONG).show();
-            return;
-        }
-
         bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
 
-        String[] permissions = new String[0];
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            permissions = new String[]{Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION};
-        } else {
-            permissions = new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
-        }
-
-        List<String> permissionDeniedList = new ArrayList<>();
-        for (String permission : permissions) {
-            int permissionCheck = ContextCompat.checkSelfPermission(this, permission);
-            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                onPermissionGranted(permission);
-            } else {
-                permissionDeniedList.add(permission);
-            }
-        }
-        if (!permissionDeniedList.isEmpty()) {
-            String[] deniedPermissions = permissionDeniedList.toArray(new String[permissionDeniedList.size()]);
-            ActivityCompat.requestPermissions(this, deniedPermissions, REQUEST_CODE_PERMISSION_LOCATION);
-        } else {
-            scanButton.setEnabled(false);
+        scanButton.setOnClickListener(view -> {
             startScan();
-        }
+        });
+
+        slideToUnlock.setOnSlideCompleteListener(slideToActView -> {
+            if (adapter != null) {
+                adapter.openGate(slideToActView);
+            }
+        });
     }
 
     private void startScan() {
+        scanButton.setEnabled(false);
         ScanSettings scanSettings = new ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build();
@@ -142,7 +94,6 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(() -> {
             bluetoothLeScanner.stopScan(scanCallback);
             scanButton.setEnabled(true);
-//            slideToUnlock.setLocked(false);
         }, SCAN_PERIOD);
     }
 
@@ -165,40 +116,4 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private void onPermissionGranted(String permission) {
-        switch (permission) {
-            case Manifest.permission.ACCESS_FINE_LOCATION:
-                if (!checkGPSIsOpen()) {
-                    new AlertDialog.Builder(this)
-                            .setTitle(R.string.notifyTitle)
-                            .setMessage(R.string.gpsNotifyMsg)
-                            .setNegativeButton(R.string.cancel,
-                                    new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            finish();
-                                        }
-                                    })
-                            .setPositiveButton(R.string.setting,
-                                    new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-                                            startActivityForResult(intent, REQUEST_CODE_OPEN_GPS);
-                                        }
-                                    })
-
-                            .setCancelable(false)
-                            .show();
-                }
-                break;
-        }
-    }
-
-    private boolean checkGPSIsOpen() {
-        LocationManager locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
-        if (locationManager == null)
-            return false;
-        return locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER);
-    }
 }

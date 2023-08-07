@@ -18,10 +18,10 @@
             android:layout_height="match_parent">
 
             <ImageView
-                android:layout_width="70dp"
+                android:layout_width="170dp"
                 android:layout_height="70dp"
                 android:layout_gravity="center"
-                android:src="@drawable/door_lock"
+                android:src="@drawable/ic_device_actual"
                 />
         </FrameLayout>
 
