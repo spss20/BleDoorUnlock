@@ -1,4 +1,4 @@
-package com.ssoftwares.doorunlock;
+package com.ssoftwares.doorunlock.views;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -6,11 +6,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import android.Manifest;
-import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.le.BluetoothLeScanner;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
@@ -19,6 +16,9 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Toast;
+
+import com.ssoftwares.doorunlock.R;
+import com.ssoftwares.doorunlock.utils.SessionManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -96,6 +96,7 @@ public class SplashScreen extends AppCompatActivity {
                     intent = new Intent(SplashScreen.this, LoginActivity.class);
                 }
                 startActivity(intent);
+                finish();
             }
         }, 200);
     }

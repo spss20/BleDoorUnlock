@@ -1,4 +1,4 @@
-package com.ssoftwares.doorunlock;
+package com.ssoftwares.doorunlock.views;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -9,6 +9,10 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
+
+import com.ssoftwares.doorunlock.R;
+import com.ssoftwares.doorunlock.api.StrapiApiService;
+import com.ssoftwares.doorunlock.utils.SessionManager;
 
 public class LoginActivity extends AppCompatActivity {
 

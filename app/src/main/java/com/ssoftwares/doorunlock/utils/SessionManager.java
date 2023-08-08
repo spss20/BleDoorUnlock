@@ -1,4 +1,4 @@
-package com.ssoftwares.doorunlock;
+package com.ssoftwares.doorunlock.utils;
 
 import android.content.Context;
 import android.content.SharedPreferences;
