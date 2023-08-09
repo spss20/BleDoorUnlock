@@ -45,6 +45,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
         }
     }
 
+    public List<BluetoothDevice> getBleList(){
+        return bleDeviceList;
+    }
     public BluetoothDevice getSelectedDevice(){
         if(selectedDevicePosition == -1){
             return null;
@@ -86,7 +89,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
             @Override
             public void onClick(View view) {
                 selectedDevicePosition = holder.getAdapterPosition();
-                notifyItemChanged(holder.getAdapterPosition());
+                notifyDataSetChanged();
+//                notifyItemChanged(holder.getAdapterPosition());
 //                Toast.makeText(context, "Ble Device  Clicked " + device.getName(), Toast.LENGTH_SHORT).show();
 
             }

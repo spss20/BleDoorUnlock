@@ -22,7 +22,6 @@
             android:layout_gravity="center"
             android:drawableRight="@drawable/ic_search"
             android:text="Scan"
-            android:textColor="@color/white"
             android:textSize="18dp" />
 
     </LinearLayout>
@@ -114,7 +113,6 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             app:inner_color="@color/white"
-            app:outer_color="@color/primary"
             app:text="Slide To Unlock" />
     </FrameLayout>
 </LinearLayout>

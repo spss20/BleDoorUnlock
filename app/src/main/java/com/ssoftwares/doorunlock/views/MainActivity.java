@@ -32,6 +32,9 @@ import com.ssoftwares.doorunlock.utils.Commands;
 import com.ssoftwares.doorunlock.utils.DateTimeUtils;
 import com.ssoftwares.doorunlock.utils.SessionManager;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -60,6 +63,13 @@ public class MainActivity extends AppCompatActivity {
     private StrapiApiService strapiApiService;
     private ApiInterface apiService;
 
+    private List<LogData> pendingLogList;
+
+    private String lastCommand = null;
+    private StringBuilder messageBuffer = new StringBuilder();
+    //    private boolean isGateOpened = false;
+    private boolean isTransaction = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,6 +84,7 @@ public class MainActivity extends AppCompatActivity {
         adapter = new DeviceAdapter(this);
         deviceRecycler.setAdapter(adapter);
 
+        pendingLogList = new ArrayList<>();
         apiService = ApiService.getLogApiService();
 
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -81,6 +92,8 @@ public class MainActivity extends AppCompatActivity {
         bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
 
         scanButton.setOnClickListener(view -> {
+            if (gatt != null)
+                gatt.close();
             startScan();
         });
 
@@ -88,22 +101,19 @@ public class MainActivity extends AppCompatActivity {
             openGate();
         });
 
-        findViewById(R.id.connect).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Log.v(TAG, "Connecting device");
+        findViewById(R.id.connect).setOnClickListener(view -> {
+            Log.v(TAG, "Connecting device");
 //                BluetoothDevice device = adapter.getSelectedDevice();
-                byte[] deviceMac = new byte[]{0x00, 0x0B, 0x57, 0x5A, (byte) 0xD7, (byte) 0xC6};
-                BluetoothDevice device = bluetoothAdapter.getRemoteDevice(deviceMac);
+            byte[] deviceMac = new byte[]{0x00, 0x0B, 0x57, 0x5A, (byte) 0xD7, (byte) 0xC6};
+            BluetoothDevice device = bluetoothAdapter.getRemoteDevice(deviceMac);
 
-                if (device == null) {
-                    Toast.makeText(MainActivity.this, "Device doesn't exist", Toast.LENGTH_SHORT).show();
-                    slideToUnlock.setCompleted(false, true);
-                    return;
-                }
-
-                gatt = new MyBleGattCallback(MainActivity.this, device, receiver);
+            if (device == null) {
+                Toast.makeText(MainActivity.this, "Device doesn't exist", Toast.LENGTH_SHORT).show();
+                slideToUnlock.setCompleted(false, true);
+                return;
             }
+
+            gatt = new MyBleGattCallback(MainActivity.this, device, receiver);
         });
 
         findViewById(R.id.disconnect).setOnClickListener(new View.OnClickListener() {
@@ -128,14 +138,95 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.gate_open).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                gatt.write("{P:12345678}");
-//                uploadLogs("{L:BLELTELOCK,4537,Testing,07082023,162102,OPEN,ble_open}" +
-////                        "{L:BLELTELOCK,4537,Testing,07082023,165039,CLOSE,ble_open}" +
-////                        "{L:BLELTELOCK,4537,Testing,07082023,165103,CLOSE,ble_open}" +
-////                        "{L:BLELTELOCK,4537,Testing,07082023,165105,CLOSE,ble_open}" +
-////                        "{L:BLELTELOCK,4537,Testing,07082023,165107,CLOSE,ble_open}" +
-////                        "{L:BLELTELOCK,4537,abhi,07082023,174303,CLOSE,ble_open}" +
-//                        "{L:BLELTELOCK,4537,abhi,07082023,175215,CLOSE,ble_open}");
+//                gatt.write("{P:12345678}");
+                parseLogs("{L:BLELTELOCK,4537,Testing,08082023,142000,OPEN,ble_open}" +
+                        "{L:BLELTELOCK,4537,Testing,07082023,165039,CLOSE,ble_open}" +
+                        "{L:BLELTELOCK,4537,surya,07082023,165103,CLOSE,ble_open}" +
+                        "{L:BLELTELOCK,4537,Testing,07082023,165105,CLOSE,ble_open}" +
+                        "{L:BLELTELOCK,4537,Testing,07082023,165107,CLOSE,ble_open}" +
+                        "{L:BLELTELOCK,4537,abhi,07082023,174303,CLOSE,ble_open}" +
+                        "{L:BLELTELOCK,4537,abhi,07082023,175215,CLOSE,ble_open}");
+            }
+        });
+
+    }
+
+    private void parseLogs(String logs) {
+        Log.v(TAG, "Log: " + logs);
+        if (logs.isEmpty())
+            return;
+        int cursor = 0;
+
+        while (true) {
+            int startIndex = logs.indexOf("{", cursor);
+            if (startIndex == -1) {
+                break;
+            }
+            int endIndex = logs.indexOf("}", startIndex) + 1;
+
+            String record = logs.substring(startIndex, endIndex);
+            Log.v(TAG, "Record: " + record);
+
+            String[] values = record.split(",");
+            if (values.length >= 7) {
+                String boardName = values[0].substring(3); // Removing "L:" from the beginning
+                String macAddress = values[1];
+                String userId = values[2];
+                String date = values[3];
+                String time = values[4];
+                String gateStatus = values[5];
+                String openMethodTemp = values[6];
+                String openMethod = openMethodTemp.substring(0, openMethodTemp.length() - 1);
+
+                // Do whatever you want with the parsed data
+                Log.d(TAG, "Board Name: " + boardName);
+                Log.d(TAG, "MAC Address: " + macAddress);
+                Log.d(TAG, "User ID: " + userId);
+                Log.d(TAG, "Date: " + date);
+                Log.d(TAG, "Time: " + time);
+                Log.d(TAG, "Gate Status: " + gateStatus);
+                Log.d(TAG, "Open Method: " + openMethod);
+
+                String isoDate = DateTimeUtils.combineDateTime(date + time);
+                Log.d(TAG, "ISODate: " + isoDate);
+                String gateStatusFi = null;
+
+                if (gateStatus.equals("OPEN")) {
+                    gateStatusFi = "opened";
+                } else if (gateStatus.equals("CLOSE")) {
+                    gateStatusFi = "closed";
+                }
+
+                LogData logData = new LogData(macAddress, userId, boardName, gateStatusFi, isoDate, openMethod);
+                pendingLogList.add(logData);
+            } else {
+                // Handle incorrect format
+                Log.e(TAG, "Invalid record format: " + record);
+            }
+            cursor = endIndex;
+        }
+
+        uploadLogs();
+    }
+
+    private void uploadLogs() {
+        LogData logData = pendingLogList.get(0);
+
+        apiService.sendLogData(new RequestModel(logData)).enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                pendingLogList.remove(0);
+                int size = pendingLogList.size();
+                Log.v(TAG, "Success, Api Size Left" + size);
+                if (size != 0)
+                    uploadLogs();
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.v(TAG, "Failed: " + t.getLocalizedMessage());
+                pendingLogList.remove(0);
+                uploadLogs();
             }
         });
     }
@@ -158,12 +249,15 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        gatt = new MyBleGattCallback(this, device, receiver);
+        isTransaction = true;
+        if (gatt == null) {
+            gatt = new MyBleGattCallback(this, device, receiver);
+        } else {
+            if (!gatt.connected) {
+                gatt.connect();
+            }
+        }
     }
-
-    private String lastCommand = null;
-    private StringBuilder messageBuffer = new StringBuilder();
-    private boolean isGateOpened = false;
 
     private BleComActions receiver = new BleComActions() {
         @Override
@@ -171,6 +265,9 @@ public class MainActivity extends AppCompatActivity {
             Log.v(TAG, "Reply Received: " + data);
             switch (data) {
                 case Commands.RES_PIN_OK:
+                    handler.postDelayed(() -> gatt.sendTimeCommand(), delay);
+                    break;
+                case Commands.RES_TIME_OK:
                     handler.postDelayed(() -> gatt.write("{I:" + sessionManager.getUserId() + "}"), delay);
                     break;
                 case Commands.RES_IMEI_OK:
@@ -183,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> Toast.makeText(MainActivity.this, "Your phone imei is not registered to use this app", Toast.LENGTH_SHORT).show());
                     break;
                 case Commands.RES_GATE_OK:
-                    isGateOpened = true;
+                    isTransaction = false;
                     sendLogCommand(3000);
                     runOnUiThread(() -> {
                         Toast.makeText(MainActivity.this, "Gate Opened Successfully", Toast.LENGTH_SHORT).show();
@@ -192,12 +289,12 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case Commands.RES_LOG_OK:
                     String logs = messageBuffer.toString();
-                    if (isGateOpened) {
-                        sendLogCommand(3000);
-                    } else {
+                    if (isTransaction) {
                         handler.postDelayed(() -> gatt.write(Commands.COMMAND_GATE_OPEN), delay);
+                    } else {
+                        sendLogCommand(3000);
                     }
-                    uploadLogs(logs);
+                    parseLogs(logs);
                     break;
                 default:
                     if (lastCommand != null && messageBuffer != null) {
@@ -209,81 +306,27 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onDeviceConnected() {
+            if (isTransaction) {
+//                gatt.write(Commands.COMMAND_ENTER_PIN);
+
+                gatt.sendPinCommand();
+            }
+        }
+
+        @Override
         public void onDeviceDisconnected() {
             Log.v(TAG, "Device Disconnected");
+            if (isTransaction) {
+                gatt.connect();
+            }
         }
     };
 
-    private void uploadLogs(String logs) {
-        Log.v(TAG, "Log: " + logs);
-        if(logs.isEmpty())
-            return;
-        int cursor = 0;
-
-        while (true) {
-            int startIndex = logs.indexOf("{", cursor);
-            if (startIndex == -1) {
-                break;
-            }
-            int endIndex = logs.indexOf("}", startIndex) + 1;
-
-            String record = logs.substring(startIndex, endIndex);
-            Log.v(TAG, "Record: " + record);
-
-            String[] values = record.split(",");
-            if (values.length >= 7) {
-                String boardName = values[0].substring(2); // Removing "L:" from the beginning
-                String macAddress = values[1];
-                String userId = values[2];
-                String date = values[3];
-                String time = values[4];
-                String gateStatus = values[5];
-                String openMethodTemp = values[6];
-                String openMethod = openMethodTemp.substring(0, openMethodTemp.length() - 1);
-
-                // Do whatever you want with the parsed data
-                Log.d(TAG, "Board Name: " + boardName);
-                Log.d(TAG, "MAC Address: " + macAddress);
-                Log.d(TAG, "User ID: " + userId);
-                Log.d(TAG, "Date: " + date);
-                Log.d(TAG, "Time: " + time);
-                Log.d(TAG, "Gate Status: " + gateStatus);
-                Log.d(TAG, "Open Method: " + openMethod);
-
-                String isoDate = DateTimeUtils.combineDateTime(date, time);
-                String gateStatusFi = null;
-
-                if (gateStatus.equals("OPEN")) {
-                    gateStatusFi = "opened";
-                } else if (gateStatus.equals("CLOSE")) {
-                    gateStatusFi = "closed";
-                }
-
-                LogData logData = new LogData(macAddress, userId, boardName, gateStatusFi, isoDate, openMethod);
-
-                apiService.sendLogData(new RequestModel(logData)).enqueue(new Callback<Void>() {
-                    @Override
-                    public void onResponse(Call<Void> call, Response<Void> response) {
-                        Log.v(TAG, "Api Success");
-                    }
-
-                    @Override
-                    public void onFailure(Call<Void> call, Throwable t) {
-                        Log.v(TAG, "Api Failed");
-                    }
-                });
-            } else {
-                // Handle incorrect format
-                Log.e(TAG, "Invalid record format: " + record);
-            }
-            cursor = endIndex;
-        }
-
-    }
-
     @Override
     protected void onDestroy() {
-        gatt.close();
+        if (gatt != null)
+            gatt.close();
         super.onDestroy();
     }
 
@@ -303,6 +346,10 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(() -> {
             bluetoothLeScanner.stopScan(scanCallback);
             scanButton.setEnabled(true);
+            if (adapter.getBleList().isEmpty()) {
+                noViewLayout.setVisibility(View.VISIBLE);
+                deviceRecycler.setVisibility(View.GONE);
+            }
         }, SCAN_PERIOD);
     }
 
@@ -310,11 +357,23 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
             // Process scan result here
+            Log.v(TAG, "ON Scan Result");
             BluetoothDevice device = result.getDevice();
             String deviceName = device.getName();
             String deviceAddress = device.getAddress();
-            if (deviceName != null)
-                adapter.addDevice(device);
+            if (deviceName != null) {
+                Log.v(TAG, "Device " + deviceName);
+                String sub = deviceName.substring(0, 3);
+                boolean isValid = sub.equals("LSG") || sub.equals("LvS");
+                if (isValid)
+                    adapter.addDevice(device);
+            }
+        }
+
+        @Override
+        public void onBatchScanResults(List<ScanResult> results) {
+            super.onBatchScanResults(results);
+            Log.v(TAG, "ON Batch Result");
         }
 
         @Override

@@ -98,7 +98,7 @@ public class SplashScreen extends AppCompatActivity {
                 startActivity(intent);
                 finish();
             }
-        }, 200);
+        }, 1500);
     }
 
     private boolean checkGPSIsOpen() {
