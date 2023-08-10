@@ -139,13 +139,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
 //                gatt.write("{P:12345678}");
-                parseLogs("{L:BLELTELOCK,4537,Testing,08082023,142000,OPEN,ble_open}" +
-                        "{L:BLELTELOCK,4537,Testing,07082023,165039,CLOSE,ble_open}" +
-                        "{L:BLELTELOCK,4537,surya,07082023,165103,CLOSE,ble_open}" +
-                        "{L:BLELTELOCK,4537,Testing,07082023,165105,CLOSE,ble_open}" +
-                        "{L:BLELTELOCK,4537,Testing,07082023,165107,CLOSE,ble_open}" +
-                        "{L:BLELTELOCK,4537,abhi,07082023,174303,CLOSE,ble_open}" +
-                        "{L:BLELTELOCK,4537,abhi,07082023,175215,CLOSE,ble_open}");
+                parseLogs("{L:BLELTELOCK,4537,Testing,09102023,142000,OPEN,ble_open}" +
+//                        "{L:BLELTELOCK,4537,Testing,07082023,165039,CLOSE,ble_open}" +
+//                        "{L:BLELTELOCK,4537,surya,07082023,165103,CLOSE,ble_open}" +
+//                        "{L:BLELTELOCK,4537,Testing,07082023,165105,CLOSE,ble_open}" +
+//                        "{L:BLELTELOCK,4537,Testing,07082023,165107,CLOSE,ble_open}" +
+//                        "{L:BLELTELOCK,4537,abhi,07082023,174303,CLOSE,ble_open}" +
+                        "{L:BLELTELOCK,4537,abhi,10082023,175215,CLOSE,ble_open}");
             }
         });
 
@@ -347,6 +347,7 @@ public class MainActivity extends AppCompatActivity {
             bluetoothLeScanner.stopScan(scanCallback);
             scanButton.setEnabled(true);
             if (adapter.getBleList().isEmpty()) {
+                Toast.makeText(this, "No Device Found", Toast.LENGTH_SHORT).show();
                 noViewLayout.setVisibility(View.VISIBLE);
                 deviceRecycler.setVisibility(View.GONE);
             }
@@ -361,7 +362,7 @@ public class MainActivity extends AppCompatActivity {
             BluetoothDevice device = result.getDevice();
             String deviceName = device.getName();
             String deviceAddress = device.getAddress();
-            if (deviceName != null) {
+            if (deviceName != null && deviceName.length() > 3) {
                 Log.v(TAG, "Device " + deviceName);
                 String sub = deviceName.substring(0, 3);
                 boolean isValid = sub.equals("LSG") || sub.equals("LvS");

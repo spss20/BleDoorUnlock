@@ -1,5 +1,7 @@
 package com.ssoftwares.doorunlock.utils;
 
+import android.util.Log;
+
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -8,6 +10,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public class DateTimeUtils {
+
+    private static final String TAG = "UtilsClass";
 
     // Method to combine date and time into ISO format
     public static String combineDateTime(String dateStr, String timeStr) {
@@ -38,12 +42,13 @@ public class DateTimeUtils {
 
     public static String combineDateTime(String inputDateTime) {
         int day = Integer.parseInt(inputDateTime.substring(0, 2));
-        int month = Integer.parseInt(inputDateTime.substring(2, 4));
+        int month = Integer.parseInt(inputDateTime.substring(2, 4)) -1;
         int year = Integer.parseInt(inputDateTime.substring(4, 8));
         int hour = Integer.parseInt(inputDateTime.substring(8, 10));
         int minute = Integer.parseInt(inputDateTime.substring(10, 12));
         int second = Integer.parseInt(inputDateTime.substring(12, 14));
 
+        Log.v(TAG , "Month: " + month);
         Calendar calendar = Calendar.getInstance();
         calendar.set(year , month , day , hour , minute , second);
 
