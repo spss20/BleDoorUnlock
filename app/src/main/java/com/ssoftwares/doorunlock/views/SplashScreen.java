@@ -22,6 +22,7 @@ import com.ssoftwares.doorunlock.utils.SessionManager;
 
 import java.util.ArrayList;
 import java.util.List;
+import io.sentry.Sentry;
 
 public class SplashScreen extends AppCompatActivity {
 
@@ -35,6 +36,7 @@ public class SplashScreen extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_splash_screen);
 
         sessionManager = new SessionManager(this);

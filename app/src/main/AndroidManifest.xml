@@ -16,11 +16,15 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:usesCleartextTraffic="true"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.DoorUnlock"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
+        <activity
+            android:name=".views.SmartMeterActivity"
+            android:exported="true" >
+
+        </activity>
         <activity
             android:name=".views.LoginActivity"
             android:exported="false" />
@@ -35,7 +39,24 @@
         </activity>
         <activity
             android:name=".views.MainActivity"
-            android:exported="true"></activity>
-    </application>
+            android:exported="true">
+
+        </activity>
+    
+    <!-- Required: set your sentry.io project identifier (DSN) -->
+    <meta-data android:name="io.sentry.dsn" android:value="https://3f6dada28d63eb8a0c79ff0c41910c6b@o4507743484706816.ingest.us.sentry.io/4507743500828672" />
+
+    <!-- enable automatic breadcrumbs for user interactions (clicks, swipes, scrolls) -->
+    <meta-data android:name="io.sentry.traces.user-interaction.enable" android:value="true" />
+    <!-- enable screenshot for crashes (could contain sensitive/PII data) -->
+    <meta-data android:name="io.sentry.attach-screenshot" android:value="true" />
+    <!-- enable view hierarchy for crashes -->
+    <meta-data android:name="io.sentry.attach-view-hierarchy" android:value="true" />
+
+    <!-- enable the performance API by setting a sample-rate, adjust in production env -->
+    <meta-data android:name="io.sentry.traces.sample-rate" android:value="1.0" />
+    <!-- enable profiling when starting transactions, adjust in production env -->
+    <meta-data android:name="io.sentry.traces.profiling.sample-rate" android:value="1.0" />
+</application>
 
 </manifest>

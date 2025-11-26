@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="meter_font_size">20sp</dimen>
+    <dimen name="meter_title_font_size">18sp</dimen>
+    <dimen name="meter_box_width">90dp</dimen>
+</resources>

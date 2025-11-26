@@ -6,6 +6,7 @@
     android:layout_height="match_parent"
     android:background="#efefef"
     android:orientation="vertical"
+    tools:viewBindingIgnore="true"
     tools:context=".views.MainActivity">
 
     <LinearLayout
@@ -113,6 +114,6 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             app:inner_color="@color/white"
-            app:text="Slide To Unlock" />
+            app:text="Slide To Connect" />
     </FrameLayout>
 </LinearLayout>

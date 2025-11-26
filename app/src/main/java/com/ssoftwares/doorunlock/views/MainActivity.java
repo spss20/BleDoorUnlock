@@ -7,6 +7,7 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -34,6 +35,8 @@ import com.ssoftwares.doorunlock.utils.SessionManager;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -60,7 +63,6 @@ public class MainActivity extends AppCompatActivity {
     //Conn Variables
     private MyBleGattCallback gatt;
     private SessionManager sessionManager;
-    private StrapiApiService strapiApiService;
     private ApiInterface apiService;
 
     private List<LogData> pendingLogList;
@@ -88,23 +90,49 @@ public class MainActivity extends AppCompatActivity {
         apiService = ApiService.getLogApiService();
 
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        strapiApiService = new StrapiApiService(this);
         bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
 
         scanButton.setOnClickListener(view -> {
-            if (gatt != null)
-                gatt.close();
-            startScan();
+//            if (gatt != null)
+//                gatt.close();
+//            startScan();
+            Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+
+            if (!pairedDevices.isEmpty()) {
+                // There are paired devices. Get the name and address of each paired device.
+                for (BluetoothDevice device : pairedDevices) {
+                    adapter.addDevice(device);
+                }
+                noViewLayout.setVisibility(View.GONE);
+                deviceRecycler.setVisibility(View.VISIBLE);
+            } else {
+                noViewLayout.setVisibility(View.VISIBLE);
+                deviceRecycler.setVisibility(View.GONE);
+            }
         });
 
         slideToUnlock.setOnSlideCompleteListener(slideToActView -> {
-            openGate();
+            BluetoothDevice device = adapter.getSelectedDevice();
+            if(device== null){
+                slideToUnlock.setCompleted(false , true);
+                Toast.makeText(this, "Please select a device first", Toast.LENGTH_SHORT).show();
+            } else {
+                UUID uuid = device.getUuids()[0].getUuid();
+                Intent intent = new Intent(MainActivity.this , SmartMeterActivity.class);
+                intent.putExtra("device" , device.getAddress() );
+                intent.putExtra("uuid", uuid.toString());
+                startActivity(intent);
+
+            }
+//            openGate();
         });
 
         findViewById(R.id.connect).setOnClickListener(view -> {
             Log.v(TAG, "Connecting device");
 //                BluetoothDevice device = adapter.getSelectedDevice();
-            byte[] deviceMac = new byte[]{0x00, 0x0B, 0x57, 0x5A, (byte) 0xD7, (byte) 0xC6};
+//            byte[] deviceMac = new byte[]{0x00, 0x0B, 0x57, 0x5A, (byte) 0xD7, (byte) 0xC6};
+            byte[] deviceMac = new byte[]{0x6E, (byte) 0xB9, 0x0A, 0x5A, 0x19, (byte) 0xF9};
+
             BluetoothDevice device = bluetoothAdapter.getRemoteDevice(deviceMac);
 
             if (device == null) {
@@ -148,7 +176,6 @@ public class MainActivity extends AppCompatActivity {
                         "{L:BLELTELOCK,4537,abhi,10082023,175215,CLOSE,ble_open}");
             }
         });
-
     }
 
     private void parseLogs(String logs) {
@@ -365,9 +392,9 @@ public class MainActivity extends AppCompatActivity {
             if (deviceName != null && deviceName.length() > 3) {
                 Log.v(TAG, "Device " + deviceName);
                 String sub = deviceName.substring(0, 3);
-                boolean isValid = sub.equals("LSG") || sub.equals("LvS");
-                if (isValid)
-                    adapter.addDevice(device);
+//                boolean isValid = sub.equals("LSG") || sub.equals("LvS");
+//                if (isValid)
+                adapter.addDevice(device);
             }
         }
 
@@ -385,4 +412,9 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        slideToUnlock.setCompleted(false, true);
+    }
 }
