@@ -13,6 +13,7 @@ import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
 import retrofit2.http.Path;
+import retrofit2.http.Query;
 
 public interface ApiInterface {
     @POST("api/auth/login")
@@ -26,4 +27,10 @@ public interface ApiInterface {
     
     @GET("api/approvals/request/{approvalId}")
     Call<ApprovalStatusResponse> getApprovalStatus(@Path("approvalId") String approvalId);
+    
+    @GET("api/logs/door-open")
+    Call<com.ssoftwares.doorunlock.models.LogHistoryResponse> getDoorOpenLogs(
+            @Query("page") int page,
+            @Query("limit") int limit
+    );
 }

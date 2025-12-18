@@ -7,6 +7,7 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
@@ -16,6 +17,7 @@ import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -24,8 +26,12 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.navigation.NavigationView;
 
 import com.ncorti.slidetoact.SlideToActView;
 import com.ssoftwares.doorunlock.R;
@@ -70,6 +76,9 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout approvalStatusContainer;
     private TextView approvalStatusText;
     private TextView approvalStatusMessage;
+    private DrawerLayout drawerLayout;
+    private NavigationView navigationView;
+    private ImageButton hamburgerMenu;
 
     private BluetoothLeScanner bluetoothLeScanner;
     private Handler handler = new Handler();
@@ -107,6 +116,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Initialize drawer layout and navigation view
+        drawerLayout = findViewById(R.id.drawer_layout);
+        navigationView = findViewById(R.id.nav_view);
+        hamburgerMenu = findViewById(R.id.hamburger_menu);
 
         deviceRecycler = findViewById(R.id.device_recycler);
         sessionManager = new SessionManager(this);
@@ -176,6 +190,30 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             requestApproval(selectedDevice);
+        });
+        
+        // Hamburger menu click listener
+        hamburgerMenu.setOnClickListener(view -> {
+            drawerLayout.openDrawer(GravityCompat.START);
+        });
+        
+        // Navigation drawer item selection listener
+        navigationView.setNavigationItemSelectedListener(item -> {
+            int id = item.getItemId();
+            
+            if (id == R.id.nav_logout) {
+                drawerLayout.closeDrawer(GravityCompat.START);
+                logout();
+                return true;
+            } else if (id == R.id.nav_history) {
+                drawerLayout.closeDrawer(GravityCompat.START);
+                // Navigate to History Activity
+                Intent historyIntent = new Intent(MainActivity.this, HistoryActivity.class);
+                startActivity(historyIntent);
+                return true;
+            }
+            
+            return false;
         });
 
         findViewById(R.id.connect).setOnClickListener(view -> {
@@ -307,47 +345,65 @@ public class MainActivity extends AppCompatActivity {
         }
         String activityType = logData.getBoard() + " Gate " + gateStatusText + " by " + openMethodText + " method";
         
-        // Get location (use default if not available)
-        double latitude = currentLocation != null ? currentLocation.getLatitude() : 0.0;
-        double longitude = currentLocation != null ? currentLocation.getLongitude() : 0.0;
-        
-        // Get user email from session
-        String userEmail = sessionManager.getUserEmail();
-        if (userEmail == null || userEmail.isEmpty()) {
-            userEmail = sessionManager.getUserId(); // Fallback to userId if email not available
-        }
-        
-        // Create log details
-        LogDetails logDetails = new LogDetails(
-            logData.getMac(),
-            userEmail,
-            latitude,
-            longitude,
-            activityType
-        );
-        
-        // Create log request
-        LogRequest logRequest = new LogRequest("idle", logDetails);
-        
-        apiService.createLog(logRequest).enqueue(new Callback<LogResponse>() {
+        // Get current location before creating log
+        getCurrentLocation(new LocationCallback() {
             @Override
-            public void onResponse(Call<LogResponse> call, Response<LogResponse> response) {
-                pendingLogList.remove(0);
-                int size = pendingLogList.size();
-                Log.v(TAG, "Success, Api Size Left: " + size);
-                if (size != 0) {
-                    uploadLogs();
+            public void onLocationObtained(Location location) {
+                // Use actual location or fallback to last known
+                double latitude = 0.0;
+                double longitude = 0.0;
+                
+                if (location != null) {
+                    latitude = location.getLatitude();
+                    longitude = location.getLongitude();
+                    Log.v(TAG, "Using location for log: " + latitude + ", " + longitude + " (Accuracy: " + location.getAccuracy() + "m)");
+                } else if (currentLocation != null) {
+                    latitude = currentLocation.getLatitude();
+                    longitude = currentLocation.getLongitude();
+                    Log.v(TAG, "Using last known location for log: " + latitude + ", " + longitude);
+                } else {
+                    Log.w(TAG, "No location available for log, using 0.0, 0.0");
                 }
-            }
+                
+                // Get user email from session
+                String userEmail = sessionManager.getUserEmail();
+                if (userEmail == null || userEmail.isEmpty()) {
+                    userEmail = sessionManager.getUserId(); // Fallback to userId if email not available
+                }
+                
+                // Create log details with actual location
+                LogDetails logDetails = new LogDetails(
+                    logData.getMac(),
+                    userEmail,
+                    latitude,
+                    longitude,
+                    activityType
+                );
+                
+                // Create log request
+                LogRequest logRequest = new LogRequest("idle", logDetails);
+                
+                apiService.createLog(logRequest).enqueue(new Callback<LogResponse>() {
+                    @Override
+                    public void onResponse(Call<LogResponse> call, Response<LogResponse> response) {
+                        pendingLogList.remove(0);
+                        int size = pendingLogList.size();
+                        Log.v(TAG, "Success, Api Size Left: " + size);
+                        if (size != 0) {
+                            uploadLogs();
+                        }
+                    }
 
-            @Override
-            public void onFailure(Call<LogResponse> call, Throwable t) {
-                Log.v(TAG, "Failed: " + t.getLocalizedMessage());
-                pendingLogList.remove(0);
-                int size = pendingLogList.size();
-                if (size != 0) {
-                    uploadLogs();
-                }
+                    @Override
+                    public void onFailure(Call<LogResponse> call, Throwable t) {
+                        Log.v(TAG, "Failed: " + t.getLocalizedMessage());
+                        pendingLogList.remove(0);
+                        int size = pendingLogList.size();
+                        if (size != 0) {
+                            uploadLogs();
+                        }
+                    }
+                });
             }
         });
     }
@@ -397,7 +453,7 @@ public class MainActivity extends AppCompatActivity {
                     handler.postDelayed(() -> gatt.sendTimeCommand(), delay);
                     break;
                 case Commands.RES_TIME_OK:
-                    handler.postDelayed(() -> gatt.write("{I:" + sessionManager.getUserId() + "}"), delay);
+                    handler.postDelayed(() -> gatt.write("{I:admin}"), delay);
                     break;
                 case Commands.RES_IMEI_OK:
                     Log.v(TAG, "Authenticated");
@@ -466,27 +522,130 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         
-        // Try to get last known location first
+        // Try to get last known location first as fallback
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            currentLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            Location lastKnown = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (lastKnown != null) {
+                currentLocation = lastKnown;
+            }
         }
         if (currentLocation == null && locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            currentLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            Location lastKnown = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            if (lastKnown != null) {
+                currentLocation = lastKnown;
+            }
         }
         
-        // Request location updates
+        // Request location updates for real-time location
         locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(@NonNull Location location) {
-                currentLocation = location;
+                // Update current location with fresh GPS data
+                if (location.getAccuracy() < 100) { // Only use location if accuracy is good (within 100 meters)
+                    currentLocation = location;
+                    Log.v(TAG, "Location updated: " + location.getLatitude() + ", " + location.getLongitude() + " (Accuracy: " + location.getAccuracy() + "m)");
+                }
+            }
+            
+            @Override
+            public void onProviderEnabled(@NonNull String provider) {
+                Log.v(TAG, "Location provider enabled: " + provider);
+            }
+            
+            @Override
+            public void onProviderDisabled(@NonNull String provider) {
+                Log.v(TAG, "Location provider disabled: " + provider);
             }
         };
         
+        // Request location updates from GPS (preferred) or Network
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1, locationListener);
-        } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 1, locationListener);
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
         }
+        if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
+        }
+    }
+    
+    /**
+     * Get current user location with callback
+     * If location is not available, requests a fresh location update
+     */
+    @SuppressLint("MissingPermission")
+    private void getCurrentLocation(LocationCallback callback) {
+        if (locationManager == null) {
+            callback.onLocationObtained(null);
+            return;
+        }
+        
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Location permission required", Toast.LENGTH_SHORT).show();
+            callback.onLocationObtained(null);
+            return;
+        }
+        
+        // If we have a recent location (less than 30 seconds old), use it
+        if (currentLocation != null && (System.currentTimeMillis() - currentLocation.getTime()) < 30000) {
+            callback.onLocationObtained(currentLocation);
+            return;
+        }
+        
+        // Try to get a fresh location
+        LocationListener tempListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(@NonNull Location location) {
+                if (location.getAccuracy() < 100) { // Use location if accuracy is good
+                    currentLocation = location;
+                    // Remove this temporary listener
+                    try {
+                        locationManager.removeUpdates(this);
+                    } catch (SecurityException e) {
+                        Log.e(TAG, "Error removing location updates", e);
+                    }
+                    callback.onLocationObtained(location);
+                }
+            }
+            
+            @Override
+            public void onProviderEnabled(@NonNull String provider) {}
+            
+            @Override
+            public void onProviderDisabled(@NonNull String provider) {}
+        };
+        
+        // Request single location update with timeout
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            locationManager.requestSingleUpdate(LocationManager.GPS_PROVIDER, tempListener, null);
+        } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            locationManager.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, tempListener, null);
+        } else {
+            // No location provider available, use last known location or return null
+            if (currentLocation != null) {
+                callback.onLocationObtained(currentLocation);
+            } else {
+                callback.onLocationObtained(null);
+            }
+        }
+        
+        // Timeout after 10 seconds
+        handler.postDelayed(() -> {
+            try {
+                locationManager.removeUpdates(tempListener);
+            } catch (SecurityException e) {
+                Log.e(TAG, "Error removing location updates", e);
+            }
+            // If we still don't have location, use last known or return null
+            if (currentLocation != null) {
+                callback.onLocationObtained(currentLocation);
+            } else {
+                callback.onLocationObtained(null);
+            }
+        }, 10000);
+    }
+    
+    interface LocationCallback {
+        void onLocationObtained(Location location);
     }
     
     @Override
@@ -506,60 +665,88 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         
-        // Get location
-        double latitude = currentLocation != null ? currentLocation.getLatitude() : 0.0;
-        double longitude = currentLocation != null ? currentLocation.getLongitude() : 0.0;
-        
-        // Create approval request
-        ApprovalRequest approvalRequest = new ApprovalRequest(
-            device.getAddress(),
-            latitude,
-            longitude
-        );
-        
         requestApprovalBtn.setEnabled(false);
-        showApprovalStatus("Requesting Approval...", "Please wait");
+        showApprovalStatus("Getting Location...", "Please wait");
         
-        apiService.createApprovalRequest(approvalRequest).enqueue(new Callback<ApprovalResponse>() {
+        // Get current location before making API call
+        getCurrentLocation(new LocationCallback() {
             @Override
-            public void onResponse(Call<ApprovalResponse> call, Response<ApprovalResponse> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    ApprovalResponse approvalResponse = response.body();
-                    if (approvalResponse.isSuccess() && approvalResponse.getApprovalRequest() != null) {
-                        currentApprovalRequestId = approvalResponse.getApprovalRequest().getId();
-                        Log.v(TAG, "Approval request created: " + currentApprovalRequestId);
-                        startPollingApprovalStatus();
-                    } else {
-                        Toast.makeText(MainActivity.this, "Failed to create approval request", Toast.LENGTH_SHORT).show();
+            public void onLocationObtained(Location location) {
+                if (location == null) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this, "Unable to get location. Please enable GPS and try again.", Toast.LENGTH_LONG).show();
                         requestApprovalBtn.setEnabled(true);
                         hideApprovalStatus();
-                    }
-                } else {
-                    // Handle error response
-                    String errorMessage = "Failed to create approval request";
-                    if (response.errorBody() != null) {
-                        try {
-                            Gson gson = new Gson();
-                            ErrorResponse errorResponse = gson.fromJson(response.errorBody().string(), ErrorResponse.class);
-                            if (errorResponse != null && errorResponse.getError() != null) {
-                                errorMessage = errorResponse.getError();
+                    });
+                    return;
+                }
+                
+                // Use actual location
+                double latitude = location.getLatitude();
+                double longitude = location.getLongitude();
+                
+                Log.v(TAG, "Using location for approval: " + latitude + ", " + longitude + " (Accuracy: " + location.getAccuracy() + "m)");
+                
+                // Create approval request with actual location
+                ApprovalRequest approvalRequest = new ApprovalRequest(
+                    device.getAddress(),
+                    latitude,
+                    longitude
+                );
+                
+                runOnUiThread(() -> {
+                    showApprovalStatus("Requesting Approval...", "Please wait");
+                });
+                
+                apiService.createApprovalRequest(approvalRequest).enqueue(new Callback<ApprovalResponse>() {
+                    @Override
+                    public void onResponse(Call<ApprovalResponse> call, Response<ApprovalResponse> response) {
+                        if (response.isSuccessful() && response.body() != null) {
+                            ApprovalResponse approvalResponse = response.body();
+                            if (approvalResponse.isSuccess() && approvalResponse.getApprovalRequest() != null) {
+                                currentApprovalRequestId = approvalResponse.getApprovalRequest().getId();
+                                Log.v(TAG, "Approval request created: " + currentApprovalRequestId);
+                                startPollingApprovalStatus();
+                            } else {
+                                runOnUiThread(() -> {
+                                    Toast.makeText(MainActivity.this, "Failed to create approval request", Toast.LENGTH_SHORT).show();
+                                    requestApprovalBtn.setEnabled(true);
+                                    hideApprovalStatus();
+                                });
                             }
-                        } catch (IOException e) {
-                            Log.e(TAG, "Error parsing error response", e);
+                        } else {
+                            // Handle error response
+                            String errorMessage = "Failed to create approval request";
+                            if (response.errorBody() != null) {
+                                try {
+                                    Gson gson = new Gson();
+                                    ErrorResponse errorResponse = gson.fromJson(response.errorBody().string(), ErrorResponse.class);
+                                    if (errorResponse != null && errorResponse.getError() != null) {
+                                        errorMessage = errorResponse.getError();
+                                    }
+                                } catch (IOException e) {
+                                    Log.e(TAG, "Error parsing error response", e);
+                                }
+                            }
+                            final String finalErrorMessage = errorMessage;
+                            runOnUiThread(() -> {
+                                Toast.makeText(MainActivity.this, finalErrorMessage, Toast.LENGTH_SHORT).show();
+                                requestApprovalBtn.setEnabled(true);
+                                hideApprovalStatus();
+                            });
                         }
                     }
-                    Toast.makeText(MainActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
-                    requestApprovalBtn.setEnabled(true);
-                    hideApprovalStatus();
-                }
-            }
-            
-            @Override
-            public void onFailure(Call<ApprovalResponse> call, Throwable t) {
-                Log.e(TAG, "Error creating approval request: " + t.getMessage());
-                Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
-                requestApprovalBtn.setEnabled(true);
-                hideApprovalStatus();
+                    
+                    @Override
+                    public void onFailure(Call<ApprovalResponse> call, Throwable t) {
+                        Log.e(TAG, "Error creating approval request: " + t.getMessage());
+                        runOnUiThread(() -> {
+                            Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                            requestApprovalBtn.setEnabled(true);
+                            hideApprovalStatus();
+                        });
+                    }
+                });
             }
         });
     }
@@ -690,6 +877,23 @@ public class MainActivity extends AppCompatActivity {
         requestApprovalBtn.setEnabled(true); // Re-enable button when hiding
         approvalStatusContainer.setVisibility(View.GONE);
         slideToUnlock.setVisibility(View.GONE);
+    }
+
+    private void logout() {
+        // Clear session
+        sessionManager.clearSession();
+        
+        // Stop any ongoing operations
+        stopPolling();
+        if (gatt != null) {
+            gatt.close();
+        }
+        
+        // Navigate to LoginActivity
+        Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
     }
 
     @Override
