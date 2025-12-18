@@ -27,6 +27,16 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
     private int selectedDevicePosition = -1;
     private static final int VIEW_TYPE_SELECTED = 100;
     private static final int VIEW_TYPE_NORMAL = 200;
+    
+    private OnDeviceSelectedListener onDeviceSelectedListener;
+
+    public interface OnDeviceSelectedListener {
+        void onDeviceSelected(BluetoothDevice device);
+    }
+
+    public void setOnDeviceSelectedListener(OnDeviceSelectedListener listener) {
+        this.onDeviceSelectedListener = listener;
+    }
 
     public DeviceAdapter(Context context) {
         this.context = context;
@@ -56,6 +66,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
     public void reset() {
         bleDeviceList.clear();
         selectedDevicePosition = -1;
+        if (onDeviceSelectedListener != null) {
+            onDeviceSelectedListener.onDeviceSelected(null);
+        }
     }
 
     @NonNull
@@ -88,8 +101,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.MyViewHold
         holder.itemView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                int previousPosition = selectedDevicePosition;
                 selectedDevicePosition = holder.getAdapterPosition();
                 notifyDataSetChanged();
+                
+                // Notify listener about device selection
+                if (onDeviceSelectedListener != null) {
+                    onDeviceSelectedListener.onDeviceSelected(device);
+                }
 //                notifyItemChanged(holder.getAdapterPosition());
 //                Toast.makeText(context, "Ble Device  Clicked " + device.getName(), Toast.LENGTH_SHORT).show();
 

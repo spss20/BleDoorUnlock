@@ -7,15 +7,23 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -23,10 +31,18 @@ import com.ncorti.slidetoact.SlideToActView;
 import com.ssoftwares.doorunlock.R;
 import com.ssoftwares.doorunlock.api.ApiInterface;
 import com.ssoftwares.doorunlock.api.ApiService;
-import com.ssoftwares.doorunlock.api.StrapiApiService;
 import com.ssoftwares.doorunlock.ble.MyBleGattCallback;
+import com.google.gson.Gson;
+import com.ssoftwares.doorunlock.models.ApprovalRequest;
+import com.ssoftwares.doorunlock.models.ApprovalResponse;
+import com.ssoftwares.doorunlock.models.ApprovalStatusResponse;
+import com.ssoftwares.doorunlock.models.ErrorResponse;
 import com.ssoftwares.doorunlock.models.LogData;
-import com.ssoftwares.doorunlock.models.RequestModel;
+import com.ssoftwares.doorunlock.models.LogDetails;
+import com.ssoftwares.doorunlock.models.LogRequest;
+import com.ssoftwares.doorunlock.models.LogResponse;
+
+import java.io.IOException;
 import com.ssoftwares.doorunlock.utils.BleComActions;
 import com.ssoftwares.doorunlock.utils.Commands;
 import com.ssoftwares.doorunlock.utils.DateTimeUtils;
@@ -50,6 +66,10 @@ public class MainActivity extends AppCompatActivity {
     private Button scanButton;
     private RelativeLayout noViewLayout;
     private SlideToActView slideToUnlock;
+    private Button requestApprovalBtn;
+    private LinearLayout approvalStatusContainer;
+    private TextView approvalStatusText;
+    private TextView approvalStatusMessage;
 
     private BluetoothLeScanner bluetoothLeScanner;
     private Handler handler = new Handler();
@@ -60,7 +80,6 @@ public class MainActivity extends AppCompatActivity {
     //Conn Variables
     private MyBleGattCallback gatt;
     private SessionManager sessionManager;
-    private StrapiApiService strapiApiService;
     private ApiInterface apiService;
 
     private List<LogData> pendingLogList;
@@ -69,6 +88,20 @@ public class MainActivity extends AppCompatActivity {
     private StringBuilder messageBuffer = new StringBuilder();
     //    private boolean isGateOpened = false;
     private boolean isTransaction = false;
+    
+    // Location variables
+    private LocationManager locationManager;
+    private Location currentLocation;
+    private LocationListener locationListener;
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 100;
+    
+    // Approval flow variables
+    private String currentApprovalRequestId = null;
+    private boolean isApprovalApproved = false;
+    private Handler pollingHandler = new Handler();
+    private Runnable pollingRunnable;
+    private static final long POLLING_INTERVAL = 3000; // Poll every 3 seconds
+    private static final long APPROVED_MESSAGE_DISPLAY_TIME = 3000; // Show "Approved" message for 3 seconds
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,25 +113,69 @@ public class MainActivity extends AppCompatActivity {
         scanButton = findViewById(R.id.scan);
         noViewLayout = findViewById(R.id.no_view_ly);
         slideToUnlock = findViewById(R.id.slide_to_unlock);
+        requestApprovalBtn = findViewById(R.id.request_approval_btn);
+        approvalStatusContainer = findViewById(R.id.approval_status_container);
+        approvalStatusText = findViewById(R.id.approval_status_text);
+        approvalStatusMessage = findViewById(R.id.approval_status_message);
+        
         deviceRecycler.setLayoutManager(new LinearLayoutManager(this));
         adapter = new DeviceAdapter(this);
         deviceRecycler.setAdapter(adapter);
+        
+        // Set up device selection listener
+        adapter.setOnDeviceSelectedListener(new DeviceAdapter.OnDeviceSelectedListener() {
+            @Override
+            public void onDeviceSelected(BluetoothDevice device) {
+                if (device != null) {
+                    // Reset approval state when new device is selected - user must go through approval again
+                    Log.v(TAG, "Device selected: " + device.getAddress());
+                    resetApprovalState();
+                    // Force show the request approval button after reset
+                    runOnUiThread(() -> {
+                        showRequestApprovalButton();
+                        Log.v(TAG, "Request approval button visibility: " + (requestApprovalBtn.getVisibility() == View.VISIBLE));
+                    });
+                } else {
+                    hideAllApprovalUI();
+                }
+            }
+        });
 
         pendingLogList = new ArrayList<>();
-        apiService = ApiService.getLogApiService();
+        ApiService.initialize(this);
+        apiService = ApiService.getApiService();
 
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        strapiApiService = new StrapiApiService(this);
         bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+        
+        // Initialize location manager
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        requestLocationUpdates();
 
         scanButton.setOnClickListener(view -> {
             if (gatt != null)
                 gatt.close();
+            resetApprovalState();
             startScan();
         });
 
         slideToUnlock.setOnSlideCompleteListener(slideToActView -> {
-            openGate();
+            if (isApprovalApproved) {
+                openGate();
+            } else {
+                Toast.makeText(this, "Please wait for approval", Toast.LENGTH_SHORT).show();
+                slideToActView.setCompleted(false, true);
+            }
+        });
+        
+        // Request approval button click listener
+        requestApprovalBtn.setOnClickListener(view -> {
+            BluetoothDevice selectedDevice = adapter.getSelectedDevice();
+            if (selectedDevice == null) {
+                Toast.makeText(this, "Please select a device first", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            requestApproval(selectedDevice);
         });
 
         findViewById(R.id.connect).setOnClickListener(view -> {
@@ -210,23 +287,67 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void uploadLogs() {
+        if (pendingLogList.isEmpty()) {
+            return;
+        }
+        
         LogData logData = pendingLogList.get(0);
-
-        apiService.sendLogData(new RequestModel(logData)).enqueue(new Callback<Void>() {
+        
+        // Combine board, gate_status, and open_method into activityType message
+        // Format: "G19 Gate Opened by BLE method"
+        String gateStatusText = logData.getGateStatus();
+        if (gateStatusText != null) {
+            gateStatusText = gateStatusText.substring(0, 1).toUpperCase() + gateStatusText.substring(1);
+        }
+        String openMethodText = logData.getOpenMethod();
+        if (openMethodText != null && !openMethodText.isEmpty()) {
+            openMethodText = openMethodText.toUpperCase();
+        } else {
+            openMethodText = "BLE";
+        }
+        String activityType = logData.getBoard() + " Gate " + gateStatusText + " by " + openMethodText + " method";
+        
+        // Get location (use default if not available)
+        double latitude = currentLocation != null ? currentLocation.getLatitude() : 0.0;
+        double longitude = currentLocation != null ? currentLocation.getLongitude() : 0.0;
+        
+        // Get user email from session
+        String userEmail = sessionManager.getUserEmail();
+        if (userEmail == null || userEmail.isEmpty()) {
+            userEmail = sessionManager.getUserId(); // Fallback to userId if email not available
+        }
+        
+        // Create log details
+        LogDetails logDetails = new LogDetails(
+            logData.getMac(),
+            userEmail,
+            latitude,
+            longitude,
+            activityType
+        );
+        
+        // Create log request
+        LogRequest logRequest = new LogRequest("idle", logDetails);
+        
+        apiService.createLog(logRequest).enqueue(new Callback<LogResponse>() {
             @Override
-            public void onResponse(Call<Void> call, Response<Void> response) {
+            public void onResponse(Call<LogResponse> call, Response<LogResponse> response) {
                 pendingLogList.remove(0);
                 int size = pendingLogList.size();
-                Log.v(TAG, "Success, Api Size Left" + size);
-                if (size != 0)
+                Log.v(TAG, "Success, Api Size Left: " + size);
+                if (size != 0) {
                     uploadLogs();
+                }
             }
 
             @Override
-            public void onFailure(Call<Void> call, Throwable t) {
+            public void onFailure(Call<LogResponse> call, Throwable t) {
                 Log.v(TAG, "Failed: " + t.getLocalizedMessage());
                 pendingLogList.remove(0);
-                uploadLogs();
+                int size = pendingLogList.size();
+                if (size != 0) {
+                    uploadLogs();
+                }
             }
         });
     }
@@ -241,6 +362,14 @@ public class MainActivity extends AppCompatActivity {
 
     public void openGate() {
         Log.v(TAG, "Opening THE GATE");
+        
+        // Check if approval is granted
+        if (!isApprovalApproved) {
+            Toast.makeText(this, "Please wait for approval before unlocking", Toast.LENGTH_SHORT).show();
+            slideToUnlock.setCompleted(false, true);
+            return;
+        }
+        
         BluetoothDevice device = adapter.getSelectedDevice();
 
         if (device == null) {
@@ -323,10 +452,258 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    @SuppressLint("MissingPermission")
+    private void requestLocationUpdates() {
+        if (locationManager == null) {
+            return;
+        }
+        
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION},
+                    LOCATION_PERMISSION_REQUEST_CODE);
+            return;
+        }
+        
+        // Try to get last known location first
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            currentLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        }
+        if (currentLocation == null && locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            currentLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+        }
+        
+        // Request location updates
+        locationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(@NonNull Location location) {
+                currentLocation = location;
+            }
+        };
+        
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1, locationListener);
+        } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 1, locationListener);
+        }
+    }
+    
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                requestLocationUpdates();
+            }
+        }
+    }
+
+    // Approval flow methods
+    private void requestApproval(BluetoothDevice device) {
+        if (device == null) {
+            Toast.makeText(this, "Please select a device first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        // Get location
+        double latitude = currentLocation != null ? currentLocation.getLatitude() : 0.0;
+        double longitude = currentLocation != null ? currentLocation.getLongitude() : 0.0;
+        
+        // Create approval request
+        ApprovalRequest approvalRequest = new ApprovalRequest(
+            device.getAddress(),
+            latitude,
+            longitude
+        );
+        
+        requestApprovalBtn.setEnabled(false);
+        showApprovalStatus("Requesting Approval...", "Please wait");
+        
+        apiService.createApprovalRequest(approvalRequest).enqueue(new Callback<ApprovalResponse>() {
+            @Override
+            public void onResponse(Call<ApprovalResponse> call, Response<ApprovalResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    ApprovalResponse approvalResponse = response.body();
+                    if (approvalResponse.isSuccess() && approvalResponse.getApprovalRequest() != null) {
+                        currentApprovalRequestId = approvalResponse.getApprovalRequest().getId();
+                        Log.v(TAG, "Approval request created: " + currentApprovalRequestId);
+                        startPollingApprovalStatus();
+                    } else {
+                        Toast.makeText(MainActivity.this, "Failed to create approval request", Toast.LENGTH_SHORT).show();
+                        requestApprovalBtn.setEnabled(true);
+                        hideApprovalStatus();
+                    }
+                } else {
+                    // Handle error response
+                    String errorMessage = "Failed to create approval request";
+                    if (response.errorBody() != null) {
+                        try {
+                            Gson gson = new Gson();
+                            ErrorResponse errorResponse = gson.fromJson(response.errorBody().string(), ErrorResponse.class);
+                            if (errorResponse != null && errorResponse.getError() != null) {
+                                errorMessage = errorResponse.getError();
+                            }
+                        } catch (IOException e) {
+                            Log.e(TAG, "Error parsing error response", e);
+                        }
+                    }
+                    Toast.makeText(MainActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
+                    requestApprovalBtn.setEnabled(true);
+                    hideApprovalStatus();
+                }
+            }
+            
+            @Override
+            public void onFailure(Call<ApprovalResponse> call, Throwable t) {
+                Log.e(TAG, "Error creating approval request: " + t.getMessage());
+                Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                requestApprovalBtn.setEnabled(true);
+                hideApprovalStatus();
+            }
+        });
+    }
+    
+    private void startPollingApprovalStatus() {
+        if (currentApprovalRequestId == null) {
+            return;
+        }
+        
+        showApprovalStatus("Approval Under Process", "Waiting for admin approval...");
+        
+        pollingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (currentApprovalRequestId != null) {
+                    checkApprovalStatus();
+                    if (!isApprovalApproved && currentApprovalRequestId != null) {
+                        pollingHandler.postDelayed(this, POLLING_INTERVAL);
+                    }
+                }
+            }
+        };
+        
+        pollingHandler.post(pollingRunnable);
+    }
+    
+    private void checkApprovalStatus() {
+        if (currentApprovalRequestId == null) {
+            return;
+        }
+        
+        apiService.getApprovalStatus(currentApprovalRequestId).enqueue(new Callback<ApprovalStatusResponse>() {
+            @Override
+            public void onResponse(Call<ApprovalStatusResponse> call, Response<ApprovalStatusResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    ApprovalStatusResponse statusResponse = response.body();
+                    String status = statusResponse.getStatus();
+                    
+                    if ("APPROVED".equals(status)) {
+                        handleApprovalApproved();
+                    } else if ("REJECTED".equals(status)) {
+                        handleApprovalRejected();
+                    } else if ("PENDING".equals(status)) {
+                        // Continue polling
+                        Log.v(TAG, "Approval still pending...");
+                    }
+                } else {
+                    Log.e(TAG, "Failed to get approval status: " + response.code());
+                }
+            }
+            
+            @Override
+            public void onFailure(Call<ApprovalStatusResponse> call, Throwable t) {
+                Log.e(TAG, "Error checking approval status: " + t.getMessage());
+            }
+        });
+    }
+    
+    private void handleApprovalApproved() {
+        isApprovalApproved = true;
+        stopPolling();
+        
+        showApprovalStatus("Request Approved", "You can now unlock the door");
+        requestApprovalBtn.setVisibility(View.GONE);
+        
+        // Show slide to unlock while keeping approval status visible
+        slideToUnlock.setVisibility(View.VISIBLE);
+    }
+    
+    private void handleApprovalRejected() {
+        isApprovalApproved = false;
+        stopPolling();
+        currentApprovalRequestId = null;
+        
+        showApprovalStatus("Request Rejected", "You cannot proceed with this device");
+        requestApprovalBtn.setVisibility(View.GONE);
+        slideToUnlock.setVisibility(View.GONE);
+        
+        // Reset after showing rejection message
+        handler.postDelayed(() -> {
+            resetApprovalState();
+            Toast.makeText(MainActivity.this, "Approval request was rejected", Toast.LENGTH_LONG).show();
+        }, 5000);
+    }
+    
+    private void stopPolling() {
+        if (pollingRunnable != null) {
+            pollingHandler.removeCallbacks(pollingRunnable);
+            pollingRunnable = null;
+        }
+    }
+    
+    private void resetApprovalState() {
+        isApprovalApproved = false;
+        currentApprovalRequestId = null;
+        stopPolling();
+        // Reset all approval-related UI and state
+        hideAllApprovalUI();
+        // Make sure slide to unlock is hidden and reset when resetting
+        slideToUnlock.setVisibility(View.GONE);
+        slideToUnlock.setCompleted(false, true);
+    }
+    
+    private void showRequestApprovalButton() {
+        requestApprovalBtn.setVisibility(View.VISIBLE);
+        requestApprovalBtn.setEnabled(true);
+        approvalStatusContainer.setVisibility(View.GONE);
+        slideToUnlock.setVisibility(View.GONE);
+    }
+    
+    private void showApprovalStatus(String status, String message) {
+        approvalStatusText.setText(status);
+        approvalStatusMessage.setText(message);
+        approvalStatusContainer.setVisibility(View.VISIBLE);
+        requestApprovalBtn.setVisibility(View.GONE);
+        // Don't hide slideToUnlock here - it will be shown separately when approved
+        if (!"Request Approved".equals(status)) {
+            slideToUnlock.setVisibility(View.GONE);
+        }
+    }
+    
+    private void hideApprovalStatus() {
+        approvalStatusContainer.setVisibility(View.GONE);
+    }
+    
+    private void hideAllApprovalUI() {
+        requestApprovalBtn.setVisibility(View.GONE);
+        requestApprovalBtn.setEnabled(true); // Re-enable button when hiding
+        approvalStatusContainer.setVisibility(View.GONE);
+        slideToUnlock.setVisibility(View.GONE);
+    }
+
     @Override
     protected void onDestroy() {
+        stopPolling();
         if (gatt != null)
             gatt.close();
+        if (locationManager != null && locationListener != null) {
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (SecurityException e) {
+                Log.e(TAG, "Error removing location updates", e);
+            }
+        }
         super.onDestroy();
     }
 
@@ -364,9 +741,9 @@ public class MainActivity extends AppCompatActivity {
             String deviceAddress = device.getAddress();
             if (deviceName != null && deviceName.length() > 3) {
                 Log.v(TAG, "Device " + deviceName);
-                String sub = deviceName.substring(0, 3);
-                boolean isValid = sub.equals("LSG") || sub.equals("LvS");
-                if (isValid)
+//                String sub = deviceName.substring(0, 3);
+//                boolean isValid = sub.equals("LSG") || sub.equals("LvS");
+//                if (isValid)
                     adapter.addDevice(device);
             }
         }

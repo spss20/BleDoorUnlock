@@ -6,6 +6,9 @@ import android.content.SharedPreferences;
 public class SessionManager {
     private static final String PREF_NAME = "door_unlock";
     private static final String KEY_USER_ID = "userId";
+    private static final String KEY_TOKEN = "token";
+    private static final String KEY_USER_EMAIL = "userEmail";
+    private static final String KEY_USER_NAME = "userName";
 
     private SharedPreferences sharedPreferences;
     private SharedPreferences.Editor editor;
@@ -24,6 +27,33 @@ public class SessionManager {
 
     public String getUserId() {
         return sharedPreferences.getString(KEY_USER_ID, null);
+    }
+
+    public void saveToken(String token) {
+        editor.putString(KEY_TOKEN, token);
+        editor.apply();
+    }
+
+    public String getToken() {
+        return sharedPreferences.getString(KEY_TOKEN, null);
+    }
+
+    public void saveUserEmail(String email) {
+        editor.putString(KEY_USER_EMAIL, email);
+        editor.apply();
+    }
+
+    public String getUserEmail() {
+        return sharedPreferences.getString(KEY_USER_EMAIL, null);
+    }
+
+    public void saveUserName(String name) {
+        editor.putString(KEY_USER_NAME, name);
+        editor.apply();
+    }
+
+    public String getUserName() {
+        return sharedPreferences.getString(KEY_USER_NAME, null);
     }
 
     public void clearSession() {

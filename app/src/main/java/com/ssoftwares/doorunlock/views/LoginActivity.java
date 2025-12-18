@@ -11,12 +11,18 @@ import android.widget.EditText;
 import android.widget.Toast;
 
 import com.ssoftwares.doorunlock.R;
-import com.ssoftwares.doorunlock.api.StrapiApiService;
+import com.ssoftwares.doorunlock.api.ApiInterface;
+import com.ssoftwares.doorunlock.api.ApiService;
+import com.ssoftwares.doorunlock.models.LoginRequest;
 import com.ssoftwares.doorunlock.utils.SessionManager;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class LoginActivity extends AppCompatActivity {
 
-    private StrapiApiService strapiApiService;
+    private ApiInterface apiService;
     private EditText username;
     private EditText password;
     private Button login;
@@ -27,7 +33,8 @@ public class LoginActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        strapiApiService = new StrapiApiService(this);
+        ApiService.initialize(this);
+        apiService = ApiService.getApiService();
         sessionManager = new SessionManager(this);
 
         username = findViewById(R.id.username);
@@ -59,19 +66,35 @@ public class LoginActivity extends AppCompatActivity {
 
         login.setEnabled(false);
 
-        strapiApiService.login(user, pass, new StrapiApiService.OnLoginResultListener() {
+        LoginRequest loginRequest = new LoginRequest(user, pass);
+        apiService.login(loginRequest).enqueue(new Callback<com.ssoftwares.doorunlock.models.LoginResponse>() {
             @Override
-            public void onLoginSuccess(String jwtToken) {
-                sessionManager.saveUserId(user);
-                Intent intent = new Intent(LoginActivity.this , MainActivity.class);
-                startActivity(intent);
-                finish();
+            public void onResponse(Call<com.ssoftwares.doorunlock.models.LoginResponse> call, Response<com.ssoftwares.doorunlock.models.LoginResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    com.ssoftwares.doorunlock.models.LoginResponse loginResponse = response.body();
+                    // Save token and user info
+                    sessionManager.saveToken(loginResponse.getToken());
+                    if (loginResponse.getUser() != null) {
+                        sessionManager.saveUserId(loginResponse.getUser().getId());
+                        sessionManager.saveUserEmail(loginResponse.getUser().getEmail());
+                        if (loginResponse.getUser().getName() != null) {
+                            sessionManager.saveUserName(loginResponse.getUser().getName());
+                        }
+                    }
+                    Intent intent = new Intent(LoginActivity.this, MainActivity.class);
+                    startActivity(intent);
+                    finish();
+                } else {
+                    Log.v("ApiError", "Login failed: " + response.code());
+                    Toast.makeText(LoginActivity.this, "Login Failed: Check email or password", Toast.LENGTH_SHORT).show();
+                    login.setEnabled(true);
+                }
             }
 
             @Override
-            public void onLoginFailure(String errorMessage) {
-                Log.v("ApiError" , " " + errorMessage);
-                Toast.makeText(LoginActivity.this, "Login Failed: Check user id or password", Toast.LENGTH_SHORT).show();
+            public void onFailure(Call<com.ssoftwares.doorunlock.models.LoginResponse> call, Throwable t) {
+                Log.v("ApiError", "Login error: " + t.getMessage());
+                Toast.makeText(LoginActivity.this, "Login Failed: " + t.getMessage(), Toast.LENGTH_SHORT).show();
                 login.setEnabled(true);
             }
         });
