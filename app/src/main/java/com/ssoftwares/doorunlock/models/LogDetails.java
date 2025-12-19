@@ -3,11 +3,8 @@ package com.ssoftwares.doorunlock.models;
 import com.google.gson.annotations.SerializedName;
 
 public class LogDetails {
-    @SerializedName("macAddress")
+    @SerializedName("deviceId")
     private String macAddress;
-    
-    @SerializedName("userEmail")
-    private String userEmail;
     
     @SerializedName("latitude")
     private double latitude;
@@ -15,15 +12,15 @@ public class LogDetails {
     @SerializedName("longitude")
     private double longitude;
     
-    @SerializedName("activityType")
+    @SerializedName("remark")
     private String activityType;
+
 
     public LogDetails() {
     }
 
-    public LogDetails(String macAddress, String userEmail, double latitude, double longitude, String activityType) {
+    public LogDetails(String macAddress, double latitude, double longitude, String activityType) {
         this.macAddress = macAddress;
-        this.userEmail = userEmail;
         this.latitude = latitude;
         this.longitude = longitude;
         this.activityType = activityType;
@@ -35,14 +32,6 @@ public class LogDetails {
 
     public void setMacAddress(String macAddress) {
         this.macAddress = macAddress;
-    }
-
-    public String getUserEmail() {
-        return userEmail;
-    }
-
-    public void setUserEmail(String userEmail) {
-        this.userEmail = userEmail;
     }
 
     public double getLatitude() {

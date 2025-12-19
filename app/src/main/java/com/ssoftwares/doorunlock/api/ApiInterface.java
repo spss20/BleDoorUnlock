@@ -3,9 +3,9 @@ package com.ssoftwares.doorunlock.api;
 import com.ssoftwares.doorunlock.models.ApprovalRequest;
 import com.ssoftwares.doorunlock.models.ApprovalResponse;
 import com.ssoftwares.doorunlock.models.ApprovalStatusResponse;
+import com.ssoftwares.doorunlock.models.LogDetails;
 import com.ssoftwares.doorunlock.models.LoginRequest;
 import com.ssoftwares.doorunlock.models.LoginResponse;
-import com.ssoftwares.doorunlock.models.LogRequest;
 import com.ssoftwares.doorunlock.models.LogResponse;
 
 import retrofit2.Call;
@@ -20,7 +20,7 @@ public interface ApiInterface {
     Call<LoginResponse> login(@Body LoginRequest loginRequest);
     
     @POST("api/logs/create")
-    Call<LogResponse> createLog(@Body LogRequest logRequest);
+    Call<LogResponse> createLog(@Body LogDetails logDetails);
     
     @POST("api/approvals/create")
     Call<ApprovalResponse> createApprovalRequest(@Body ApprovalRequest approvalRequest);

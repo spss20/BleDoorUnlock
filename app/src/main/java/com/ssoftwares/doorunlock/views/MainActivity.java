@@ -45,7 +45,6 @@ import com.ssoftwares.doorunlock.models.ApprovalStatusResponse;
 import com.ssoftwares.doorunlock.models.ErrorResponse;
 import com.ssoftwares.doorunlock.models.LogData;
 import com.ssoftwares.doorunlock.models.LogDetails;
-import com.ssoftwares.doorunlock.models.LogRequest;
 import com.ssoftwares.doorunlock.models.LogResponse;
 
 import java.io.IOException;
@@ -254,13 +253,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
 //                gatt.write("{P:12345678}");
-                parseLogs("{L:BLELTELOCK,4537,Testing,09102023,142000,OPEN,ble_open}" +
+                parseLogs("{L:BLELTELOCK,AA:BB:CC:DD:EE:01,Testing,09102023,142000,OPEN,ble_open}" +
 //                        "{L:BLELTELOCK,4537,Testing,07082023,165039,CLOSE,ble_open}" +
 //                        "{L:BLELTELOCK,4537,surya,07082023,165103,CLOSE,ble_open}" +
 //                        "{L:BLELTELOCK,4537,Testing,07082023,165105,CLOSE,ble_open}" +
 //                        "{L:BLELTELOCK,4537,Testing,07082023,165107,CLOSE,ble_open}" +
 //                        "{L:BLELTELOCK,4537,abhi,07082023,174303,CLOSE,ble_open}" +
-                        "{L:BLELTELOCK,4537,abhi,10082023,175215,CLOSE,ble_open}");
+                        "{L:BLELTELOCK,AA:BB:CC:DD:EE:02,abhi,10082023,175215,CLOSE,ble_open}");
             }
         });
 
@@ -343,7 +342,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             openMethodText = "BLE";
         }
-        String activityType = logData.getBoard() + " Gate " + gateStatusText + " by " + openMethodText + " method";
+        String activityType = "Gate " + gateStatusText + " by " + openMethodText + " method";
         
         // Get current location before creating log
         getCurrentLocation(new LocationCallback() {
@@ -365,25 +364,16 @@ public class MainActivity extends AppCompatActivity {
                     Log.w(TAG, "No location available for log, using 0.0, 0.0");
                 }
                 
-                // Get user email from session
-                String userEmail = sessionManager.getUserEmail();
-                if (userEmail == null || userEmail.isEmpty()) {
-                    userEmail = sessionManager.getUserId(); // Fallback to userId if email not available
-                }
-                
                 // Create log details with actual location
                 LogDetails logDetails = new LogDetails(
                     logData.getMac(),
-                    userEmail,
                     latitude,
                     longitude,
                     activityType
                 );
                 
                 // Create log request
-                LogRequest logRequest = new LogRequest("idle", logDetails);
-                
-                apiService.createLog(logRequest).enqueue(new Callback<LogResponse>() {
+                apiService.createLog(logDetails).enqueue(new Callback<LogResponse>() {
                     @Override
                     public void onResponse(Call<LogResponse> call, Response<LogResponse> response) {
                         pendingLogList.remove(0);
