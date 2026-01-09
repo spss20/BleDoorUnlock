@@ -12,7 +12,7 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class ApiService {
-    private static final String BASE_URL = "https://server.gallerindia.com/ble-lock-api/";
+    private static final String BASE_URL = "http://122.180.241.64:5001/";
 
     private static Retrofit retrofit;
     private static Context applicationContext;

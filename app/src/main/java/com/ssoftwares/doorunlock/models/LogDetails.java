@@ -15,15 +15,17 @@ public class LogDetails {
     @SerializedName("remark")
     private String activityType;
 
+    private String timestamp;
 
     public LogDetails() {
     }
 
-    public LogDetails(String macAddress, double latitude, double longitude, String activityType) {
+    public LogDetails(String macAddress, double latitude, double longitude, String activityType, String timestamp) {
         this.macAddress = macAddress;
         this.latitude = latitude;
         this.longitude = longitude;
         this.activityType = activityType;
+        this.timestamp = timestamp;
     }
 
     public String getMacAddress() {
@@ -56,6 +58,14 @@ public class LogDetails {
 
     public void setActivityType(String activityType) {
         this.activityType = activityType;
+    }
+
+    public String getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(String timestamp) {
+        this.timestamp = timestamp;
     }
 }
 
