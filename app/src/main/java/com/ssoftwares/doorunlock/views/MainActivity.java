@@ -93,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
     private ApiInterface apiService;
 
     private List<LogData> pendingLogList;
+    private boolean isUploadingLogs = false;
 
     private String lastCommand = null;
     private StringBuilder messageBuffer = new StringBuilder();
@@ -324,27 +325,28 @@ public class MainActivity extends AppCompatActivity {
             }
             cursor = endIndex;
         }
+
+        // Start uploading logs in queue manner
+        uploadLogs();
     }
 
     private void uploadLogs() {
+        // Prevent concurrent uploads - only one request at a time
+        if (isUploadingLogs) {
+            Log.v(TAG, "Upload already in progress, skipping...");
+            return;
+        }
+
         if (pendingLogList.isEmpty()) {
             return;
         }
 
+        isUploadingLogs = true;
         LogData logData = pendingLogList.get(0);
 
         // Combine board, gate_status, and open_method into activityType message
         // Format: "G19 Gate Opened by BLE method"
         String gateStatusText = logData.getGateStatus();
-//        if (gateStatusText != null) {
-//            gateStatusText = gateStatusText.substring(0, 1).toUpperCase() + gateStatusText.substring(1);
-//        }
-//        String openMethodText = logData.getOpenMethod();
-//        if (openMethodText != null && !openMethodText.isEmpty()) {
-//            openMethodText = openMethodText.toUpperCase();
-//        } else {
-//            openMethodText = "BLE";
-//        }
 
         String activityText;
         if (Objects.equals(logData.getOpenMethod(), "N/A"))
@@ -370,6 +372,7 @@ public class MainActivity extends AppCompatActivity {
                     pendingLogList.remove(0);
                 int size = pendingLogList.size();
                 Log.v(TAG, "Success, Api Size Left: " + size);
+                isUploadingLogs = false;
                 if (size != 0) {
                     uploadLogs();
                 }
@@ -381,6 +384,7 @@ public class MainActivity extends AppCompatActivity {
                 if (!pendingLogList.isEmpty())
                     pendingLogList.remove(0);
                 int size = pendingLogList.size();
+                isUploadingLogs = false;
                 if (size != 0) {
                     uploadLogs();
                 }
@@ -457,7 +461,7 @@ public class MainActivity extends AppCompatActivity {
                     if (isTransaction) {
                         handler.postDelayed(() -> gatt.write(Commands.COMMAND_GATE_OPEN), delay);
                     } else {
-                        sendLogCommand(300);
+                        sendLogCommand(500);
                     }
                     parseLogs(logs);
                     break;
