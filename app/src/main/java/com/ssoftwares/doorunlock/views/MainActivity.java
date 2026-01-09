@@ -381,6 +381,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<LogResponse> call, Throwable t) {
                 Log.v(TAG, "Failed: " + t.getLocalizedMessage());
+
+                // Handle specific network errors
+                if (t instanceof java.net.SocketTimeoutException) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Connection timeout. Please check your network.", Toast.LENGTH_SHORT).show());
+                } else if (t instanceof java.net.UnknownHostException) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "No internet connection. Please check your network.", Toast.LENGTH_SHORT).show());
+                }
+
                 if (!pendingLogList.isEmpty())
                     pendingLogList.remove(0);
                 int size = pendingLogList.size();
